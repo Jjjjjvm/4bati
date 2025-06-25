@@ -154,13 +154,52 @@
             try {
                 // Global variables from Canvas environment
                 const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-                const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-                const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+                let firebaseConfig = {};
+
+                // Safely parse firebaseConfig
+                if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+                    try {
+                        firebaseConfig = JSON.parse(__firebase_config);
+                    } catch (e) {
+                        console.error("Error parsing __firebase_config:", e);
+                        showMessage("فشل في قراءة إعدادات Firebase (صيغة غير صحيحة). يرجى التأكد من أن الإعدادات صحيحة.", "error");
+                        return; // Stop initialization if config is malformed
+                    }
+                } else {
+                    console.error("__firebase_config is undefined or empty. Firebase initialization will use a placeholder.");
+                    showMessage("إعدادات Firebase غير متوفرة. قد لا يعمل التطبيق بشكل صحيح.", "warning");
+                    // Provide a minimal placeholder config to prevent immediate crash, though app might still not work
+                    firebaseConfig = {
+                        apiKey: "YOUR_API_KEY", // Placeholder
+                        authDomain: "YOUR_PROJECT_ID.firebaseapp.com", // Placeholder
+                        projectId: "YOUR_PROJECT_ID", // Placeholder
+                        storageBucket: "YOUR_PROJECT_ID.appspot.com", // Placeholder
+                        messagingSenderId: "YOUR_SENDER_ID", // Placeholder
+                        appId: "YOUR_APP_ID" // Placeholder
+                    };
+                }
+
+                // Check if firebaseConfig has at least an apiKey to proceed
+                if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
+                    console.error("firebaseConfig is incomplete:", firebaseConfig);
+                    showMessage("إعدادات Firebase غير مكتملة. الرجاء التحقق من إعدادات المشروع.", "error");
+                    return; // Stop initialization if config is incomplete
+                }
 
                 // Initialize Firebase app
                 app = initializeApp(firebaseConfig);
+
+                // Verify app initialization before getting services
+                if (!app) {
+                    console.error("Firebase app failed to initialize.");
+                    showMessage("فشل في تهيئة تطبيق Firebase الأساسي.", "error");
+                    return;
+                }
+
                 db = getFirestore(app);
                 auth = getAuth(app);
+
+                const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
                 // Authenticate user
                 onAuthStateChanged(auth, async (user) => {
@@ -185,8 +224,8 @@
                 });
 
             } catch (error) {
-                console.error("Error initializing Firebase:", error);
-                showMessage("فشل في تهيئة Firebase. قد لا يعمل التطبيق بشكل صحيح.", "error");
+                console.error("Unhandled error during Firebase initialization:", error);
+                showMessage("فشل في تهيئة Firebase. قد لا يعمل التطبيق بشكل صحيح. يرجى التحقق من سجلات الأخطاء.", "error");
             }
         };
 
@@ -206,6 +245,12 @@
             generateBtn.disabled = true; // Disable button during generation
 
             try {
+                // Ensure Firebase is initialized before making API calls
+                if (!app || !auth) {
+                    showMessage("خدمات Firebase غير مهيأة. يرجى تحديث الصفحة والمحاولة مرة أخرى.", "error");
+                    return;
+                }
+
                 let chatHistory = [];
                 const fullPrompt = `أريد نكتة أو ذبة قصيرة، مضحكة جداً، ذكية، إبداعية، وغير متوقعة باللغة العربية بناءً على الفكرة التالية: "${prompt}". الرجاء إعطاء نص الذبة فقط، بدون أي مقدمات أو عبارات إضافية.`;
                 chatHistory.push({ role: "user", parts: [{ text: fullPrompt }] });
@@ -242,7 +287,12 @@
                 } else {
                     // This block is for cases where response.ok is true but the expected structure is missing
                     console.error("Unexpected API response structure (missing content):", result);
-                    showMessage("عذرًا، لم يتمكن الذكاء الاصطناعي من إنشاء ذبة بتلك الفكرة. يرجى تجربة فكرة أخرى.", "error");
+                    // Check for blocked reasons or safety attributes
+                    if (result.promptFeedback && result.promptFeedback.blockReason) {
+                        showMessage(`عذرًا، لا يمكنني إنشاء ذبة عن هذا الموضوع لأسباب تتعلق بالسلامة.`, "error");
+                    } else {
+                        showMessage("عذرًا، لم يتمكن الذكاء الاصطناعي من إنشاء ذبة بتلك الفكرة. يرجى تجربة فكرة أخرى.", "error");
+                    }
                 }
             } catch (error) {
                 console.error("Error generating joke (network or parsing):", error);
