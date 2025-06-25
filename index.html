@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ذباتي - مولد النكت بالذكاء الاصطناعي</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f2f5; /* Light gray background */
+        }
+        /* Custom styles for better aesthetics */
+        .card {
+            background-color: #ffffff;
+            border-radius: 1rem; /* More rounded corners */
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            padding: 2.5rem; /* Increased padding */
+        }
+        .btn-primary {
+            background-image: linear-gradient(to right, #6EE7B7, #34D399); /* Green gradient */
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.75rem; /* Rounded button */
+            font-weight: 600;
+            transition: all 0.2s ease-in-out;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        .btn-primary:hover {
+            opacity: 0.9;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 10px -1px rgba(0, 0, 0, 0.15), 0 3px 6px -1px rgba(0, 0, 0, 0.08);
+        }
+        .btn-copy {
+            background-color: #4B5563; /* Dark gray for copy button */
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            font-size: 0.875rem;
+            transition: background-color 0.2s ease-in-out;
+        }
+        .btn-copy:hover {
+            background-color: #1F2937;
+        }
+        .input-field {
+            border: 1px solid #D1D5DB;
+            border-radius: 0.75rem;
+            padding: 0.75rem 1rem;
+            width: 100%;
+            box-shadow: inset 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+        }
+        .loading-spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-left-color: #34D399; /* Green spinner */
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .message-box {
+            background-color: #FEF3C7; /* Light yellow background for messages */
+            color: #92400E; /* Dark brown text */
+            border: 1px solid #FCD34D;
+            border-radius: 0.75rem;
+            padding: 1rem;
+            margin-top: 1rem;
+            display: none; /* Hidden by default */
+        }
+        .message-box.show {
+            display: block;
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-4">
+    <div class="card max-w-2xl w-full text-center">
+        <h1 class="text-5xl font-extrabold text-gray-800 mb-6 tracking-tight">ذباتي</h1>
+        <p class="text-lg text-gray-600 mb-8">
+            قم بإنشاء ذبات ونكت فريدة باستخدام الذكاء الاصطناعي. فقط اكتب فكرتك ودعنا نقوم بالباقي!
+        </p>
+
+        <div class="mb-6">
+            <textarea id="promptInput" rows="4" class="input-field placeholder-gray-500 text-gray-800"
+                      placeholder="اكتب هنا فكرة الذبة أو الموضوع (مثال: عن الامتحانات، عن القهوة، موقف مضحك)..."></textarea>
+        </div>
+
+        <button id="generateBtn" class="btn-primary w-full text-xl">
+            إنشاء ذبة
+        </button>
+
+        <div id="loadingIndicator" class="flex justify-center items-center mt-6 hidden">
+            <div class="loading-spinner"></div>
+            <p class="mr-3 text-gray-700">الذكاء الاصطناعي يفكر...</p>
+        </div>
+
+        <div id="resultContainer" class="mt-8 p-6 bg-gray-50 border border-gray-200 rounded-xl hidden">
+            <h2 class="text-2xl font-bold text-gray-800 mb-4">ذبتك الجاهزة:</h2>
+            <p id="generatedJoke" class="text-xl text-gray-700 leading-relaxed mb-4 whitespace-pre-wrap"></p>
+            <button id="copyBtn" class="btn-copy">
+                نسخ الذبة
+            </button>
+        </div>
+
+        <div id="messageBox" class="message-box">
+            <p id="messageText"></p>
+        </div>
+    </div>
+
+    <script type="module">
+        // Firebase imports
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // DOM elements
+        const promptInput = document.getElementById('promptInput');
+        const generateBtn = document.getElementById('generateBtn');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        const resultContainer = document.getElementById('resultContainer');
+        const generatedJoke = document.getElementById('generatedJoke');
+        const copyBtn = document.getElementById('copyBtn');
+        const messageBox = document.getElementById('messageBox');
+        const messageText = document.getElementById('messageText');
+
+        let app;
+        let db;
+        let auth;
+        let userId = 'anonymous'; // Default to anonymous
+
+        // Function to display messages to the user
+        function showMessage(message, type = 'warning') {
+            messageText.textContent = message;
+            messageBox.className = `message-box show`; // Reset classes
+            if (type === 'error') {
+                messageBox.classList.add('bg-red-100', 'text-red-800', 'border-red-400');
+            } else if (type === 'success') {
+                messageBox.classList.add('bg-green-100', 'text-green-800', 'border-green-400');
+            } else { // Default to warning
+                messageBox.classList.add('bg-yellow-100', 'text-yellow-800', 'border-yellow-400');
+            }
+        }
+
+        // Initialize Firebase on window load
+        window.onload = async function() {
+            try {
+                // Global variables from Canvas environment
+                const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+                const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+                const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+                // Initialize Firebase app
+                app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+
+                // Authenticate user
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        console.log("Firebase initialized. User ID:", userId);
+                    } else {
+                        // Sign in anonymously if no token is provided or if it fails
+                        try {
+                            if (initialAuthToken) {
+                                await signInWithCustomToken(auth, initialAuthToken);
+                            } else {
+                                await signInAnonymously(auth);
+                            }
+                            userId = auth.currentUser?.uid || crypto.randomUUID(); // Fallback for anonymous
+                            console.log("Signed in anonymously. User ID:", userId);
+                        } catch (error) {
+                            console.error("Error signing in:", error);
+                            showMessage("حدث خطأ أثناء تسجيل الدخول. يرجى المحاولة مرة أخرى.", "error");
+                        }
+                    }
+                });
+
+            } catch (error) {
+                console.error("Error initializing Firebase:", error);
+                showMessage("فشل في تهيئة Firebase. قد لا يعمل التطبيق بشكل صحيح.", "error");
+            }
+        };
+
+        // Event listener for the generate button
+        generateBtn.addEventListener('click', async () => {
+            const prompt = promptInput.value.trim();
+
+            if (!prompt) {
+                showMessage("الرجاء إدخال فكرة أو موضوع لإنشاء الذبة.", "warning");
+                return;
+            }
+
+            // Hide previous results and messages
+            resultContainer.classList.add('hidden');
+            messageBox.classList.remove('show');
+            loadingIndicator.classList.remove('hidden');
+            generateBtn.disabled = true; // Disable button during generation
+
+            try {
+                let chatHistory = [];
+                // Modified prompt: Instruct the AI to ONLY return the joke text
+                const fullPrompt = `أريد نكتة أو ذبة قصيرة ومضحكة باللغة العربية بناءً على الفكرة التالية: "${prompt}". اجعلها مبتكرة وغير تقليدية. الرجاء إعطاء نص الذبة فقط، بدون أي مقدمات أو عبارات إضافية.`;
+                chatHistory.push({ role: "user", parts: [{ text: fullPrompt }] });
+
+                const payload = { contents: chatHistory };
+                const apiKey = ""; // Canvas will provide this automatically
+
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await response.json();
+
+                if (result.candidates && result.candidates.length > 0 &&
+                    result.candidates[0].content && result.candidates[0].content.parts &&
+                    result.candidates[0].content.parts.length > 0) {
+                    const jokeText = result.candidates[0].content.parts[0].text;
+                    generatedJoke.textContent = jokeText;
+                    resultContainer.classList.remove('hidden');
+                    showMessage("تم إنشاء الذبة بنجاح!", "success");
+                } else {
+                    console.error("Unexpected API response structure:", result);
+                    showMessage("عذرًا، لم أتمكن من إنشاء ذبة. الرجاء المحاولة مرة أخرى.", "error");
+                }
+            } catch (error) {
+                console.error("Error generating joke:", error);
+                showMessage("حدث خطأ أثناء إنشاء الذبة. تأكد من اتصالك بالإنترنت وحاول مرة أخرى.", "error");
+            } finally {
+                loadingIndicator.classList.add('hidden');
+                generateBtn.disabled = false; // Re-enable button
+            }
+        });
+
+        // Event listener for the copy button
+        copyBtn.addEventListener('click', () => {
+            const textToCopy = generatedJoke.textContent;
+            if (textToCopy) {
+                // Fallback for document.execCommand for older browsers/environments
+                const textArea = document.createElement("textarea");
+                textArea.value = textToCopy;
+                document.body.appendChild(textArea);
+                textArea.select();
+                try {
+                    document.execCommand('copy');
+                    showMessage("تم نسخ الذبة إلى الحافظة!", "success");
+                } catch (err) {
+                    console.error('Failed to copy text:', err);
+                    showMessage("فشل نسخ الذبة. يرجى نسخها يدوياً.", "error");
+                } finally {
+                    document.body.removeChild(textArea);
+                }
+            }
+        });
+    </script>
+</body>
+</html>
