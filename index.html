@@ -112,12 +112,6 @@
     </div>
 
     <script type="module">
-        // Firebase imports - These are optional for the core joke generation functionality
-        // They are included for future potential features like saving jokes or user auth.
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
         // DOM elements
         const promptInput = document.getElementById('promptInput');
         const generateBtn = document.getElementById('generateBtn');
@@ -127,11 +121,6 @@
         const copyBtn = document.getElementById('copyBtn');
         const messageBox = document.getElementById('messageBox');
         const messageText = document.getElementById('messageText');
-
-        let app = null; // Initialize app to null, will be set if Firebase init succeeds
-        let db = null;
-        let auth = null;
-        let userId = 'anonymous'; // Default to anonymous
 
         // Function to display messages to the user
         function showMessage(message, type = 'warning') {
@@ -150,85 +139,6 @@
             }
         }
 
-        // Initialize Firebase on window load
-        window.onload = async function() {
-            console.log("Window loaded. Attempting Firebase initialization...");
-            try {
-                const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-                let firebaseConfig = null; // Start as null
-
-                console.log("Raw __firebase_config (type:", typeof __firebase_config, "):", __firebase_config);
-                console.log("Raw __initial_auth_token (type:", typeof __initial_auth_token, "):", __initial_auth_token);
-
-                // Safely parse firebaseConfig
-                if (typeof __firebase_config !== 'undefined' && __firebase_config) {
-                    try {
-                        firebaseConfig = JSON.parse(__firebase_config);
-                        console.log("Parsed firebaseConfig:", firebaseConfig);
-                    } catch (e) {
-                        console.error("Error parsing __firebase_config JSON:", e);
-                        showMessage("فشل في قراءة إعدادات Firebase (صيغة JSON غير صحيحة). لن تتم تهيئة Firebase.", "error");
-                    }
-                } else {
-                    console.warn("__firebase_config is undefined or empty. Firebase initialization will be skipped.");
-                    showMessage("إعدادات Firebase غير متوفرة في بيئة Canvas. وظائف قاعدة البيانات والمصادقة لن تكون متاحة.", "warning");
-                }
-
-                // Only attempt to initialize if we have a valid-looking firebaseConfig
-                if (firebaseConfig && Object.keys(firebaseConfig).length > 0 && firebaseConfig.apiKey && firebaseConfig.projectId) {
-                    try {
-                        app = initializeApp(firebaseConfig);
-                        console.log("Firebase app initialized successfully.");
-
-                        db = getFirestore(app);
-                        auth = getAuth(app);
-
-                        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-
-                        // Authenticate user
-                        onAuthStateChanged(auth, async (user) => {
-                            if (user) {
-                                userId = user.uid;
-                                console.log("Firebase authenticated. User ID:", userId);
-                            } else {
-                                try {
-                                    if (initialAuthToken) {
-                                        console.log("Attempting signInWithCustomToken...");
-                                        await signInWithCustomToken(auth, initialAuthToken);
-                                    } else {
-                                        console.log("Attempting signInAnonymously...");
-                                        await signInAnonymously(auth);
-                                    }
-                                    userId = auth.currentUser?.uid || crypto.randomUUID(); // Fallback for anonymous
-                                    console.log("Signed in. User ID:", userId);
-                                } catch (error) {
-                                    console.error("Error during Firebase authentication:", error);
-                                    showMessage("حدث خطأ أثناء تسجيل الدخول إلى Firebase. (خطأ المصادقة)", "error");
-                                }
-                            }
-                        });
-                    } catch (initError) {
-                        console.error("Firebase app initialization failed with error:", initError);
-                        showMessage("فشل في تهيئة تطبيق Firebase الأساسي. (خطأ: " + initError.message + ")", "error");
-                        // Set app to null if initialization failed, so subsequent checks pass
-                        app = null;
-                        db = null;
-                        auth = null;
-                    }
-                } else {
-                    console.warn("Firebase configuration is incomplete or invalid. Skipping Firebase initialization and authentication.");
-                    // Ensure app, db, auth remain null if Firebase is skipped/failed
-                    app = null;
-                    db = null;
-                    auth = null;
-                }
-
-            } catch (overallError) {
-                console.error("Unhandled error in window.onload during Firebase setup:", overallError);
-                showMessage("حدث خطأ عام أثناء إعداد Firebase. يرجى مراجعة سجلات وحدة التحكم لمزيد من التفاصيل.", "error");
-            }
-        };
-
         // Event listener for the generate button
         generateBtn.addEventListener('click', async () => {
             const prompt = promptInput.value.trim();
@@ -245,14 +155,14 @@
             generateBtn.disabled = true;
 
             try {
-                // The Gemini API call does NOT depend on Firebase.
-                // So, even if Firebase initialization failed, this part should still work.
                 let chatHistory = [];
+                // Emphasize generating a very funny, smart, creative, and unexpected joke,
+                // and strictly instruct to return only the joke text.
                 const fullPrompt = `أريد نكتة أو ذبة قصيرة، مضحكة جداً، ذكية، إبداعية، وغير متوقعة باللغة العربية بناءً على الفكرة التالية: "${prompt}". الرجاء إعطاء نص الذبة فقط، بدون أي مقدمات أو عبارات إضافية.`;
                 chatHistory.push({ role: "user", parts: [{ text: fullPrompt }] });
 
                 const payload = { contents: chatHistory };
-                const apiKey = "AIzaSyCkN_5SuUfS_21mlzQ0BL3XE74Eh36W2Jw"; // Canvas will provide this automatically
+                const apiKey = "AIzaSyCkN_5SuUfS_21mlzQ0BL3XE74Eh36W2Jw"; // Canvas will provide this automatically as per platform rules
 
                 const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
 
