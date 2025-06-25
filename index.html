@@ -135,7 +135,11 @@
         // Function to display messages to the user
         function showMessage(message, type = 'warning') {
             messageText.textContent = message;
-            messageBox.className = `message-box show`; // Reset classes
+            // Remove all type-related classes before adding a new one
+            messageBox.classList.remove('bg-red-100', 'text-red-800', 'border-red-400',
+                                        'bg-green-100', 'text-green-800', 'border-green-400',
+                                        'bg-yellow-100', 'text-yellow-800', 'border-yellow-400');
+            messageBox.className = `message-box show`; // Reset classes and show it
             if (type === 'error') {
                 messageBox.classList.add('bg-red-100', 'text-red-800', 'border-red-400');
             } else if (type === 'success') {
@@ -197,14 +201,13 @@
 
             // Hide previous results and messages
             resultContainer.classList.add('hidden');
-            messageBox.classList.remove('show');
+            messageBox.classList.remove('show'); // Ensure message box is hidden before new operation
             loadingIndicator.classList.remove('hidden');
             generateBtn.disabled = true; // Disable button during generation
 
             try {
                 let chatHistory = [];
-                // Modified prompt: Instruct the AI to ONLY return the joke text
-                const fullPrompt = `أريد نكتة أو ذبة قصيرة ومضحكة باللغة العربية بناءً على الفكرة التالية: "${prompt}". اجعلها مبتكرة وغير تقليدية. الرجاء إعطاء نص الذبة فقط، بدون أي مقدمات أو عبارات إضافية.`;
+                const fullPrompt = `أريد نكتة أو ذبة قصيرة، مضحكة جداً، ذكية، إبداعية، وغير متوقعة باللغة العربية بناءً على الفكرة التالية: "${prompt}". الرجاء إعطاء نص الذبة فقط، بدون أي مقدمات أو عبارات إضافية.`;
                 chatHistory.push({ role: "user", parts: [{ text: fullPrompt }] });
 
                 const payload = { contents: chatHistory };
@@ -218,7 +221,16 @@
                     body: JSON.stringify(payload)
                 });
 
+                // Check if the response was successful (status 200-299)
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({})); // Try to parse error, but don't fail if not JSON
+                    console.error("API response not OK:", response.status, response.statusText, errorData);
+                    showMessage(`عذرًا، حدث خطأ من الخادم (${response.status}). الرجاء المحاولة مرة أخرى لاحقًا.`, "error");
+                    return; // Exit function if response is not OK
+                }
+
                 const result = await response.json();
+                console.log("API Result:", result); // Log the full result for debugging
 
                 if (result.candidates && result.candidates.length > 0 &&
                     result.candidates[0].content && result.candidates[0].content.parts &&
@@ -228,12 +240,13 @@
                     resultContainer.classList.remove('hidden');
                     showMessage("تم إنشاء الذبة بنجاح!", "success");
                 } else {
-                    console.error("Unexpected API response structure:", result);
-                    showMessage("عذرًا، لم أتمكن من إنشاء ذبة. الرجاء المحاولة مرة أخرى.", "error");
+                    // This block is for cases where response.ok is true but the expected structure is missing
+                    console.error("Unexpected API response structure (missing content):", result);
+                    showMessage("عذرًا، لم يتمكن الذكاء الاصطناعي من إنشاء ذبة بتلك الفكرة. يرجى تجربة فكرة أخرى.", "error");
                 }
             } catch (error) {
-                console.error("Error generating joke:", error);
-                showMessage("حدث خطأ أثناء إنشاء الذبة. تأكد من اتصالك بالإنترنت وحاول مرة أخرى.", "error");
+                console.error("Error generating joke (network or parsing):", error);
+                showMessage("حدث خطأ في الاتصال أو معالجة البيانات. تأكد من اتصالك بالإنترنت وحاول مرة أخرى.", "error");
             } finally {
                 loadingIndicator.classList.add('hidden');
                 generateBtn.disabled = false; // Re-enable button
